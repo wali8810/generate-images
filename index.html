@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Estampa Mágica</title>
+    <link rel="icon" href="https://imgur.com/PVjo40J.png" type="image/png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                purple: '#6A0DAD',
+                light: '#E6E6FA',
+                dark: '#4B0082',
+                warning: '#FFCC00',
+                danger: '#FF4444'
+              }
+            },
+            fontFamily: {
+              sans: ['Helvetica', 'Arial', 'sans-serif'],
+              hand: ['Comic Sans MS', 'Chalkboard SE', 'sans-serif'], // Fonte "artesanal"
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'bounce-slow': 'bounce 2s infinite',
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
+    "mongoose": "https://aistudiocdn.com/mongoose@^9.0.0",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "jsonwebtoken": "https://aistudiocdn.com/jsonwebtoken@^9.0.2",
+    "dotenv/": "https://aistudiocdn.com/dotenv@^17.2.3/",
+    "axios": "https://aistudiocdn.com/axios@^1.13.2",
+    "bcryptjs": "https://aistudiocdn.com/bcryptjs@^3.0.3",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "path": "https://aistudiocdn.com/path@^0.12.7"
+  }
+}
+</script>
+<style>
+  /* Tooltip customizado */
+  [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+    margin-bottom: 5px;
+  }
+  .transition-colors {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+</style>
+</head>
+  <body class="bg-gray-50 text-gray-800 transition-colors">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
