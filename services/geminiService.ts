@@ -1,18 +1,23 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Preset } from "../types";
 
 export const generateStamp = async (
-  userText: string, 
-  preset: Preset | null, 
+  userText: string,
+  preset: Preset | null,
   referenceImageBase64?: string,
   isMockupGeneration: boolean = false
 ): Promise<string> => {
-  
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
+
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Chave da API do Gemini não configurada. Adicione VITE_GEMINI_API_KEY no arquivo .env");
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+
   let finalPrompt = "";
-  
+
   if (isMockupGeneration && referenceImageBase64) {
        const variationSeed = Math.floor(Math.random() * 10000);
        const vibes = ['Soft Lighting', 'Bright Day', 'Cozy Indoor', 'Minimalist Studio', 'Natural Light', 'Warm Atmosphere', 'Cool Tones'];
@@ -21,10 +26,10 @@ export const generateStamp = async (
        finalPrompt = `
         You are an expert product photographer and mockup generator.
         YOUR TASK: Take the attached artwork/design and realistically apply it to the product described below.
-        
+
         Product Description: "${userText}"
         Context/Vibe: ${randomVibe} (Variation ID: ${variationSeed})
-        
+
         CRITICAL RULES:
         1. The attached image MUST be the design printed/stamped on the product.
         2. Do NOT change the design itself, just apply it to the 3D surface of the product.
@@ -36,7 +41,7 @@ export const generateStamp = async (
       finalPrompt = `
         You are an expert image editor and digital artist.
         YOUR TASK: Modify the attached reference image based strictly on the user's instruction.
-        
+
         User Instruction: "${userText}"
         ${preset ? `Target Style: ${preset.promptSuffix}` : ''}
 
@@ -62,45 +67,29 @@ export const generateStamp = async (
   }
 
   try {
-    const parts: any[] = [{ text: finalPrompt }];
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const parts: any[] = [finalPrompt];
 
     if (referenceImageBase64) {
        const base64Data = referenceImageBase64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
        parts.unshift({
          inlineData: {
            data: base64Data,
-           mimeType: 'image/png' 
+           mimeType: 'image/png'
          }
        });
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
-      contents: { parts: parts },
-      config: {
-        imageConfig: {
-          aspectRatio: "1:1",
-          imageSize: "1K"
-        }
-      }
-    });
+    const result = await model.generateContent(parts);
+    const response = result.response;
+    const text = response.text();
 
-    let imageBase64 = null;
-    
-    if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-                imageBase64 = `data:image/png;base64,${part.inlineData.data}`;
-                break;
-            }
-        }
+    if (!text) {
+      throw new Error("A IA gerou uma resposta vazia.");
     }
 
-    if (!imageBase64) {
-      throw new Error("A IA gerou uma resposta, mas não foi uma imagem válida.");
-    }
-
-    return imageBase64;
+    return `data:image/png;base64,${text}`;
 
   } catch (error: any) {
     console.error("Erro Gemini:", error);
@@ -109,45 +98,46 @@ export const generateStamp = async (
 };
 
 export const moderateImage = async (base64Image: string): Promise<boolean> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  try {
-    const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: cleanBase64,
-              mimeType: 'image/png'
-            }
-          },
-          {
-            text: "Review this image. Is it a safe, appropriate illustration, vector art, or sticker design? It should not be a raw real-world photo of people, and must not contain NSFW, violence, or hate symbols. Return JSON with 'allowed' boolean."
-          }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            allowed: { type: Type.BOOLEAN }
-          }
-        }
+  if (!apiKey) {
+    console.warn("API Key não configurada, pulando moderação");
+    return true;
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: {
+        responseMimeType: "application/json"
       }
     });
 
-    if (response.text) {
-        const json = JSON.parse(response.text);
+    const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: cleanBase64,
+          mimeType: 'image/png'
+        }
+      },
+      "Review this image. Is it a safe, appropriate illustration, vector art, or sticker design? It should not be a raw real-world photo of people, and must not contain NSFW, violence, or hate symbols. Return JSON with 'allowed' boolean property. Example: {\"allowed\": true}"
+    ]);
+
+    const response = result.response;
+    const text = response.text();
+
+    if (text) {
+        const json = JSON.parse(text);
         return json.allowed === true;
     }
-    return true; // Default allow if unsure
+    return true;
 
   } catch (error) {
     console.error("Moderation error:", error);
-    return true; // Fail open
+    return true;
   }
 };
