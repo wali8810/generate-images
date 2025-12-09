@@ -1,4 +1,5 @@
 import { Preset } from "../types";
+import { API_URL } from "../constants";
 
 export const generateStamp = async (
   userText: string,
@@ -8,7 +9,7 @@ export const generateStamp = async (
 ): Promise<string> => {
 
   try {
-    const response = await fetch('/api/generate', {
+    const response = await fetch(`${API_URL}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -43,7 +44,7 @@ export const generateStamp = async (
 
 export const moderateImage = async (base64Image: string): Promise<boolean> => {
   try {
-    const response = await fetch('/api/moderate', {
+    const response = await fetch(`${API_URL}/api/moderate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

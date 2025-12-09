@@ -1,7 +1,10 @@
-
 import { Preset, Mockup, Template } from './types';
 
+// URL da API (adicione esta linha)
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
 export const APP_NAME = "Estampa Mágica";
+// ... resto do código
 export const BRAND_COLOR = "#6A0DAD";
 export const ICON_URL = "https://imgur.com/PVjo40J.png";
 
