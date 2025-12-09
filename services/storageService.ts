@@ -1,111 +1,114 @@
 import { GeneratedImage } from '../types';
 
-// Atualização de versão para forçar limpeza de caches antigos/corrompidos
+// Mudança de versão na chave para garantir limpeza de dados antigos pesados se necessário
 const STORAGE_KEY_LIBRARY = 'estampa_magica_library_v4';
 
-// Compressão agressiva para Mobile (JPEG 0.5)
+// Helper to compress image before saving
+// Converts PNG (heavy) to JPEG (light) with 50% quality
+// This is critical for mobile devices with limited LocalStorage (~5MB)
 const compressImage = (base64Str: string, quality = 0.5, maxWidth = 600): Promise<string> => {
-    return new Promise((resolve) => {
-        if (!base64Str) {
-            resolve("");
-            return;
-        }
-        const img = new Image();
-        img.src = base64Str;
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            
-            let width = img.width;
-            let height = img.height;
-            
-            // Redimensionamento forçado para garantir que caiba na memória
-            if (width > maxWidth) {
-                height = (height * maxWidth) / width;
-                width = maxWidth;
-            }
+  return new Promise((resolve) => {
+    if (!base64Str) {
+      resolve("");
+      return;
+    }
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
 
-            canvas.width = width;
-            canvas.height = height;
-            
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                resolve(base64Str);
-                return;
-            }
-            
-            // Fundo branco para JPEG
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
-            // Retorna JPEG leve
-            resolve(canvas.toDataURL('image/jpeg', quality)); 
-        };
-        img.onerror = () => resolve(base64Str);
-    });
+      // Calculate new size maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+
+      // White background for JPEG (since JPEG doesn't support transparency)
+      // This saves massive space. The original generation remains available if needed immediately,
+      // but for library storage, JPEG is essential for mobile.
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Export as JPEG to save massive space (LocalStorage limit is ~5MB)
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(base64Str); // Fallback
+  });
 };
 
 export const getLibrary = (): GeneratedImage[] => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_LIBRARY);
-    if (!stored) return [];
-    return JSON.parse(stored);
+    return stored ? JSON.parse(stored) : [];
   } catch (e) {
-    console.error("Erro ao ler biblioteca:", e);
+    console.error("Error loading library", e);
     return [];
   }
 };
 
 export const saveToLibrary = async (image: GeneratedImage): Promise<void> => {
   try {
-    // 1. Compressão
+    // 1. Compress Image (Critical for Mobile Storage)
     const compressedData = await compressImage(image.data);
-    if (!compressedData) throw new Error("Falha na compressão da imagem.");
 
-    const optimizedImage = { ...image, data: compressedData };
-
-    // 2. Recupera biblioteca atual
-    let lib = getLibrary();
-    
-    // 3. Adiciona nova imagem no topo
-    let newLib = [optimizedImage, ...lib];
-
-    // 4. Limite Hard: Mantém no máximo 15 itens recentes para evitar estouro
-    if (newLib.length > 15) {
-        newLib = newLib.slice(0, 15);
+    // Check if compression failed or resulted in empty string
+    if (!compressedData || compressedData.length < 100) {
+      console.error("Compression failed, using original");
+      // Only use original if really needed, though it might crash storage
+    } else {
+      image.data = compressedData;
     }
 
-    // 5. Tentativa de Salvamento com Fallback (FIFO)
-    const trySave = (data: GeneratedImage[]) => {
-        try {
-            localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify(data));
-            return true;
-        } catch (e: any) {
-            // Verifica erro de cota
-            if (e.name === 'QuotaExceededError' || e.code === 22 || e.message?.toLowerCase().includes('quota')) {
-                return false;
-            }
-            throw e;
+    const lib = getLibrary();
+    // Add new image to the front
+    let newLib = [image, ...lib];
+
+    // 2. Safe Save Loop (FIFO - First In First Out)
+    const save = (data: GeneratedImage[]) => {
+      try {
+        localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify(data));
+        return true;
+      } catch (e: any) {
+        // Check for quota exceeded errors
+        if (e.name === 'QuotaExceededError' || e.code === 22 || e.message?.toLowerCase().includes('quota')) {
+          return false;
         }
+        throw e;
+      }
     };
 
-    // Enquanto não conseguir salvar, remove o item mais antigo (do final do array)
-    while (!trySave(newLib)) {
-        if (newLib.length <= 1) {
-            // Se só tem a imagem nova e ainda não cabe, tenta limpar TUDO e salvar só ela
-            localStorage.removeItem(STORAGE_KEY_LIBRARY);
-            // Se falhar aqui, é porque a imagem única é maior que a memória do navegador (raro com compressão)
-            if (!trySave([optimizedImage])) {
-                throw new Error("Memória do dispositivo cheia. Não foi possível salvar a imagem.");
-            }
-            return;
-        }
-        newLib.pop(); // Remove o último (mais antigo) e tenta de novo
+    // Try saving. If full, remove oldest items until it fits.
+    // This loop guarantees we never crash due to full storage.
+    let attempts = 0;
+    while (!save(newLib) && newLib.length > 0 && attempts < 50) {
+      // Remove the oldest image (last in array)
+      newLib.pop();
+      attempts++;
+    }
+
+    if (newLib.length === 0 && image.data) {
+      // Extreme case: even one image didn't fit (very unlikely with compression)
+      // Clear everything and try to save just the new one
+      localStorage.removeItem(STORAGE_KEY_LIBRARY);
+      localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify([image]));
     }
 
   } catch (err) {
-    console.error("Erro fatal ao salvar:", err);
-    throw err; // Repassa o erro para o Generator exibir a mensagem
+    console.error("Storage Critical Error:", err);
+    throw new Error("Não foi possível salvar na galeria. Tente limpar artes antigas.");
   }
 };
 
@@ -115,15 +118,15 @@ export const removeFromLibrary = (id: string) => {
     const newLib = lib.filter(img => img.id !== id);
     localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify(newLib));
   } catch (e) {
-    console.error("Erro ao remover:", e);
+    console.error("Error removing item", e);
   }
 };
 
 export const toggleFavorite = (id: string) => {
   try {
     const lib = getLibrary();
-    const newLib = lib.map(img => 
-        img.id === id ? { ...img, isFavorite: !img.isFavorite } : img
+    const newLib = lib.map(img =>
+      img.id === id ? { ...img, isFavorite: !img.isFavorite } : img
     );
     localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify(newLib));
     return newLib;
