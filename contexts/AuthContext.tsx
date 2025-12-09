@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const token = localStorage.getItem(STORAGE_KEY_TOKEN);
             if (token) {
                 try {
-                    const response = await fetch(`${API_URL}/me`, {
+                    const response = await fetch(`${API_URL}/api/me`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (response.ok) {
@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [dbUser]);
 
     const login = async (email: string, password: string) => {
-        const response = await fetch(`${API_URL}/login`, {
+        const response = await fetch(`${API_URL}/api/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const register = async (email: string, password: string) => {
-        const response = await fetch(`${API_URL}/register`, {
+        const response = await fetch(`${API_URL}/api/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -160,7 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (dbUser) {
             try {
                 const token = localStorage.getItem(STORAGE_KEY_TOKEN);
-                const response = await fetch(`${API_URL}/me`, {
+                const response = await fetch(`${API_URL}/api/me`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.ok) {
