@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserState } from '../types';
 import { DAILY_CREDITS, API_URL } from '../constants';
+import { getOrCreateDeviceId } from '../utils/fingerprint';
 
 interface User {
     id: number;
@@ -17,11 +18,14 @@ interface AuthContextType {
     loading: boolean;
     isAdmin: boolean;
     isUserBlocked: boolean; // Helper to check if user is blocked
+    deviceId: string | null; // Device fingerprint for visitors
+    deviceCreditsRemaining: number; // Credits remaining for this device
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
     logout: () => void;
     refreshUser: () => void;
     decrementCredit: () => void;
+    checkDeviceCredits: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +37,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [dbUser, setDbUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [appUser, setAppUser] = useState<UserState | null>(null);
+    const [deviceId, setDeviceId] = useState<string | null>(null);
+    const [deviceCreditsRemaining, setDeviceCreditsRemaining] = useState(3);
 
     // Load App User (Credits/Local State)
     const loadAppUser = () => {
@@ -213,6 +219,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    // Check Device Credits - Verificar créditos do dispositivo
+    const checkDeviceCredits = async () => {
+        try {
+            const id = await getOrCreateDeviceId();
+            setDeviceId(id);
+
+            const response = await fetch(`${API_URL}/api/check-device`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: id })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setDeviceCreditsRemaining(data.creditsRemaining);
+            }
+        } catch (error) {
+            console.error('Error checking device credits:', error);
+        }
+    };
+
+    // Check device credits on mount (for visitors)
+    useEffect(() => {
+        if (!dbUser) {
+            checkDeviceCredits();
+        }
+    }, [dbUser]);
+
     return (
         <AuthContext.Provider value={{
             user: appUser!,
@@ -225,11 +259,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 dbUser?.subscription_status === 'pending' ||
                 dbUser?.subscription_status === 'overdue'
             ),
+            deviceId,
+            deviceCreditsRemaining,
             login,
             register,
             logout,
             refreshUser,
-            decrementCredit
+            decrementCredit,
+            checkDeviceCredits
         }}>
             {!loading && appUser && children}
         </AuthContext.Provider>
