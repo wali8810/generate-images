@@ -1,5 +1,6 @@
 import { Preset } from "../types";
 import { API_URL } from "../constants";
+import { getOrCreateDeviceId } from "../utils/fingerprint";
 
 export const generateStamp = async (
   userText: string,
@@ -9,6 +10,9 @@ export const generateStamp = async (
 ): Promise<string> => {
 
   try {
+    // Obter deviceId para visitantes
+    const deviceId = await getOrCreateDeviceId();
+
     const response = await fetch(`${API_URL}/api/generate`, {
       method: 'POST',
       headers: {
@@ -19,7 +23,8 @@ export const generateStamp = async (
         userText,
         preset,
         referenceImageBase64,
-        isMockupGeneration
+        isMockupGeneration,
+        deviceId
       }),
     });
 

@@ -55,7 +55,35 @@ const checkDailyReset = async (db, user) => {
 // Logic for generation (reused for both /api/generate and /api/generate.php)
 const handleGenerate = async (req, res) => {
   try {
-    const { userText, preset, referenceImageBase64, isMockupGeneration } = req.body;
+    const { userText, preset, referenceImageBase64, isMockupGeneration, deviceId } = req.body;
+
+    // Verificar device credits para visitantes (sem token)
+    const authHeader = req.headers['authorization'];
+    if (!authHeader && deviceId) {
+      const db = await getDb();
+      let device = await db.get('SELECT credits_used FROM device_credits WHERE device_id = ?', [deviceId]);
+
+      if (!device) {
+        await db.run('INSERT INTO device_credits (device_id, credits_used) VALUES (?, 0)', [deviceId]);
+        device = { credits_used: 0 };
+      }
+
+      if (device.credits_used >= 3) {
+        return res.status(403).json({
+          error: 'Você usou seus 3 créditos grátis. Crie uma conta para continuar!',
+          blocked: true,
+          reason: 'free_credits_exhausted'
+        });
+      }
+
+      // Incrementar créditos usados
+      await db.run(
+        'UPDATE device_credits SET credits_used = credits_used + 1, last_seen = CURRENT_TIMESTAMP WHERE device_id = ?',
+        [deviceId]
+      );
+
+      console.log(`📱 Device ${deviceId} used ${device.credits_used + 1}/3 credits`);
+    }
 
     let finalPrompt = "";
 

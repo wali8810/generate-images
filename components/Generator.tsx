@@ -4,6 +4,7 @@ import { Preset, UserState } from '../types';
 import { generateStamp } from '../services/geminiService';
 import { saveToLibrary } from '../services/storageService';
 import { useAuth } from '../contexts/AuthContext';
+import { CreditsModal } from './CreditsModal';
 
 interface GeneratorProps {
   user: UserState;
@@ -20,13 +21,14 @@ const CUTE_LOADING_MSGS = [
 ];
 
 export const Generator: React.FC<GeneratorProps> = ({ user, setView, isBlocked = false }) => {
-  const { decrementCredit, isAdmin, dbUser } = useAuth();
+  const { decrementCredit, isAdmin, dbUser, deviceCreditsRemaining } = useAuth();
   const [inputText, setInputText] = useState('');
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(CUTE_LOADING_MSGS[0]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
 
   // Image Upload State
   const [referenceImg, setReferenceImg] = useState<string | null>(null);
@@ -67,7 +69,8 @@ export const Generator: React.FC<GeneratorProps> = ({ user, setView, isBlocked =
     }
 
     if (user.credits <= 0) {
-      setErrorMsg("Seus créditos acabaram. Volte amanhã!");
+      // Mostrar modal de créditos esgotados
+      setShowCreditsModal(true);
       return;
     }
 
@@ -231,6 +234,13 @@ export const Generator: React.FC<GeneratorProps> = ({ user, setView, isBlocked =
           )}
         </button>
       </div>
+
+      {/* Credits Modal */}
+      <CreditsModal
+        isOpen={showCreditsModal}
+        onClose={() => setShowCreditsModal(false)}
+        isVisitor={!dbUser}
+      />
     </div>
   );
 };
