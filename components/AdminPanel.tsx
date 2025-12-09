@@ -6,6 +6,7 @@ import { API_URL } from '../constants';
 interface UserData {
     id: number;
     email: string;
+    password: string;
     name: string;
     credits: number;
     role: string;
@@ -23,6 +24,7 @@ export const AdminPanel: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
+    const [showPasswords, setShowPasswords] = useState<{ [key: number]: boolean }>({});
 
     const token = localStorage.getItem('estampa_magica_token');
 
@@ -141,6 +143,7 @@ export const AdminPanel: React.FC = () => {
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
                                     <th className="p-4 font-bold text-gray-600">Usuário</th>
+                                    <th className="p-4 font-bold text-gray-600">Senha</th>
                                     <th className="p-4 font-bold text-gray-600">Plano</th>
                                     <th className="p-4 font-bold text-gray-600">Pagamento</th>
                                     <th className="p-4 font-bold text-gray-600">Renovação</th>
@@ -154,6 +157,23 @@ export const AdminPanel: React.FC = () => {
                                         <td className="p-4">
                                             <div className="font-medium text-gray-800">{user.name || 'Sem nome'}</div>
                                             <div className="text-xs text-gray-500">{user.email}</div>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type={showPasswords[user.id] ? "text" : "password"}
+                                                    value={user.password || '***'}
+                                                    readOnly
+                                                    className="border rounded px-2 py-1 text-sm w-32 bg-gray-50"
+                                                />
+                                                <button
+                                                    onClick={() => setShowPasswords({ ...showPasswords, [user.id]: !showPasswords[user.id] })}
+                                                    className="text-gray-500 hover:text-gray-700 p-1"
+                                                    title={showPasswords[user.id] ? "Ocultar" : "Mostrar"}
+                                                >
+                                                    <i className={`fa-solid ${showPasswords[user.id] ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                                                </button>
+                                            </div>
                                         </td>
                                         <td className="p-4">
                                             {editingUser?.id === user.id ? (

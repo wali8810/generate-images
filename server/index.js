@@ -243,9 +243,38 @@ const handleModerate = async (req, res) => {
   }
 };
 
+// Middleware: Check Payment Status
+const checkPaymentStatus = async (req, res, next) => {
+  // Se não tem token, permite (visitante)
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return next();
+
+  try {
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const db = await getDb();
+    const user = await db.get('SELECT role, subscription_status FROM users WHERE id = ?', [decoded.id]);
+
+    // Admin sempre pode gerar
+    if (user && user.role === 'admin') return next();
+
+    // Bloquear se status de pagamento está atrasado/pendente/cancelado/inativo
+    if (user && ['pending', 'overdue', 'cancelled', 'inactive'].includes(user.subscription_status)) {
+      return res.status(403).json({
+        error: 'Sua conta está com pagamento pendente ou atrasado. Por favor, regularize sua situação para continuar gerando imagens.'
+      });
+    }
+
+    next();
+  } catch (error) {
+    // Se erro no token, permite (visitante)
+    next();
+  }
+};
+
 // Routes - Support both standard and .php extensions for local compatibility
-app.post('/api/generate', handleGenerate);
-app.post('/api/generate.php', handleGenerate); // Alias for PHP compatibility
+app.post('/api/generate', checkPaymentStatus, handleGenerate);
+app.post('/api/generate.php', checkPaymentStatus, handleGenerate); // Alias for PHP compatibility
 
 app.post('/api/moderate', handleModerate);
 app.post('/api/moderate.php', handleModerate); // Alias for PHP compatibility
@@ -394,7 +423,7 @@ app.get('/api/me', authenticateToken, async (req, res) => {
 app.get('/api/admin/users', authenticateAdmin, async (req, res) => {
   try {
     const db = await getDb();
-    const users = await db.all('SELECT id, email, name, credits, role, status, created_at, plan_type, subscription_status, subscription_renewal FROM users ORDER BY created_at DESC');
+    const users = await db.all('SELECT id, email, password, name, credits, role, status, created_at, plan_type, subscription_status, subscription_renewal FROM users ORDER BY created_at DESC');
     console.log(`📋 Fetched ${users.length} users with plan data`); // DEBUG LOG
     res.json(users);
   } catch (error) {
