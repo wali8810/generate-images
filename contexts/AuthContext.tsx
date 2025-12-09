@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserState } from '../types';
-import { DAILY_CREDITS } from '../constants';
+import { DAILY_CREDITS, API_URL } from '../constants';
 
 interface User {
     id: number;
@@ -28,7 +28,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY_USER = 'estampa_magica_user_v2';
 const STORAGE_KEY_TOKEN = 'estampa_magica_token';
-const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:5001/api';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [dbUser, setDbUser] = useState<User | null>(null);
