@@ -44,5 +44,15 @@ export async function getDb() {
   try { await dbInstance.exec("ALTER TABLE users ADD COLUMN subscription_renewal DATE"); } catch (e) { }
   try { await dbInstance.exec("ALTER TABLE users ADD COLUMN last_daily_reset DATE"); } catch (e) { }
 
+  // Device Credits Table - Track free credits usage by device
+  await dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS device_credits (
+      device_id TEXT PRIMARY KEY,
+      credits_used INTEGER DEFAULT 0,
+      first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   return dbInstance;
 }

@@ -272,6 +272,38 @@ const checkPaymentStatus = async (req, res, next) => {
   }
 };
 
+// Check Device Credits - Endpoint para verificar quantos créditos o dispositivo usou
+app.post('/api/check-device', async (req, res) => {
+  try {
+    const { deviceId } = req.body;
+
+    if (!deviceId) {
+      return res.status(400).json({ error: 'deviceId is required' });
+    }
+
+    const db = await getDb();
+    let device = await db.get('SELECT * FROM device_credits WHERE device_id = ?', [deviceId]);
+
+    if (!device) {
+      // Primeiro acesso deste dispositivo
+      await db.run(
+        'INSERT INTO device_credits (device_id, credits_used) VALUES (?, 0)',
+        [deviceId]
+      );
+      device = { device_id: deviceId, credits_used: 0 };
+    }
+
+    res.json({
+      creditsUsed: device.credits_used,
+      creditsRemaining: Math.max(0, 3 - device.credits_used),
+      maxCredits: 3
+    });
+  } catch (error) {
+    console.error('Error checking device:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Routes - Support both standard and .php extensions for local compatibility
 app.post('/api/generate', checkPaymentStatus, handleGenerate);
 app.post('/api/generate.php', checkPaymentStatus, handleGenerate); // Alias for PHP compatibility
