@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../constants';
 
 interface UserData {
     id: number;
@@ -23,12 +24,11 @@ export const AdminPanel: React.FC = () => {
     const [error, setError] = useState('');
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
 
-    const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:5001/api');
     const token = localStorage.getItem('estampa_magica_token');
 
     const fetchUsers = async () => {
         try {
-            const response = await fetch(`${API_URL}/admin/users`, {
+            const response = await fetch(`${API_URL}/api/admin/users`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Failed to fetch users');
@@ -60,7 +60,7 @@ export const AdminPanel: React.FC = () => {
         const newCredits = Number(currentCredits) + parseInt(amount);
 
         try {
-            await fetch(`${API_URL}/admin/users/${userId}/credits`, {
+            await fetch(`${API_URL}/api/admin/users/${userId}/credits`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ export const AdminPanel: React.FC = () => {
 
     const handleUpdateUser = async (user: UserData) => {
         try {
-            await fetch(`${API_URL}/admin/users/${user.id}`, {
+            await fetch(`${API_URL}/api/admin/users/${user.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -100,7 +100,7 @@ export const AdminPanel: React.FC = () => {
         if (!confirm("Tem certeza que deseja excluir este usuário?")) return;
 
         try {
-            await fetch(`${API_URL}/admin/users/${userId}`, {
+            await fetch(`${API_URL}/api/admin/users/${userId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
