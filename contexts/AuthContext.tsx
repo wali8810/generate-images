@@ -124,20 +124,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const handleCreditUpdate = (data: { userId: number; credits: number; timestamp: number }) => {
             console.log('💳 Credit update received:', data);
 
-            if (dbUser && dbUser.id === data.userId) {
-                // Update dbUser credits
-                setDbUser(prev => prev ? { ...prev, credits: data.credits } : null);
-            }
+            setDbUser(prev => {
+                if (prev && prev.id === data.userId) {
+                    return { ...prev, credits: data.credits };
+                }
+                return prev;
+            });
         };
 
         // Subscribe to user data updates
         const handleUserUpdate = (data: { userId: number; user: any; timestamp: number }) => {
             console.log('👤 User update received:', data);
 
-            if (dbUser && dbUser.id === data.userId) {
-                // Update dbUser with new data
-                setDbUser(data.user);
-            }
+            setDbUser(prev => {
+                if (prev && prev.id === data.userId) {
+                    return data.user;
+                }
+                return prev;
+            });
         };
 
         websocketService.on('creditUpdate', handleCreditUpdate);
@@ -148,7 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             websocketService.off('creditUpdate', handleCreditUpdate);
             websocketService.off('userUpdate', handleUserUpdate);
         };
-    }, [dbUser]);
+    }, []); // Only run once on mount
 
     const login = async (email: string, password: string) => {
         const response = await fetch(`${API_URL}/api/login`, {
