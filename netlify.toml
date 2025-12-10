@@ -9,11 +9,3 @@
 
 [build.environment]
   NODE_VERSION = "18"
-
-# Configurações de segurança
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "no-referrer"
