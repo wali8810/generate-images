@@ -44,6 +44,31 @@ app.use((req, res, next) => {
   next();
 });
 
+// Explicit CORS headers for Cloudflare Tunnel compatibility
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    'https://gerador-estampas.netlify.app',
+    'http://localhost:5173',
+    'http://localhost:5001'
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
+
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
   console.error("❌ Erro: GEMINI_API_KEY não encontrada no arquivo .env");
