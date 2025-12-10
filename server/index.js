@@ -19,22 +19,22 @@ const PORT = process.env.PORT || 5001;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// CORS Configuration - Allow Netlify frontend
-const corsOptions = {
-  origin: ['https://gerador-estampas.netlify.app', 'http://localhost:5173', 'http://localhost:5001'],
-  credentials: true,
+// CORS Configuration - Simplified for Cloudflare Tunnel compatibility
+// Using wildcard to avoid preflight OPTIONS requests
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
-};
+}));
 
-app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 
 // Initialize Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: ['https://gerador-estampas.netlify.app', 'http://localhost:5173', 'http://localhost:5001'],
-    methods: ["GET", "POST"],
-    credentials: true
+    origin: '*',
+    methods: ["GET", "POST"]
   }
 });
 
