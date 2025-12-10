@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../constants';
+import { websocketService } from '../services/websocket';
 
 interface UserData {
     id: number;
@@ -53,6 +54,23 @@ export const AdminPanel: React.FC = () => {
         if (isAdmin) {
             fetchUsers();
         }
+    }, [isAdmin]);
+
+    // WebSocket listener for real-time updates
+    useEffect(() => {
+        if (!isAdmin) return;
+
+        const handleUserListUpdate = (data: { action: string; userId: number; timestamp: number }) => {
+            console.log('📋 User list update received:', data);
+            // Refresh the user list
+            fetchUsers();
+        };
+
+        websocketService.on('userListUpdate', handleUserListUpdate);
+
+        return () => {
+            websocketService.off('userListUpdate', handleUserListUpdate);
+        };
     }, [isAdmin]);
 
     const handleAddCredits = async (userId: number, currentCredits: number) => {

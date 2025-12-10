@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserState } from '../types';
 import { DAILY_CREDITS, API_URL } from '../constants';
 import { getOrCreateDeviceId } from '../utils/fingerprint';
+import { websocketService } from '../services/websocket';
 
 interface User {
     id: number;
@@ -112,6 +113,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loadAppUser();
     }, [dbUser]);
 
+    // WebSocket Connection Management
+    useEffect(() => {
+        const token = localStorage.getItem(STORAGE_KEY_TOKEN);
+
+        // Connect to WebSocket
+        websocketService.connect(token || undefined);
+
+        // Subscribe to credit updates
+        const handleCreditUpdate = (data: { userId: number; credits: number; timestamp: number }) => {
+            console.log('💳 Credit update received:', data);
+
+            if (dbUser && dbUser.id === data.userId) {
+                // Update dbUser credits
+                setDbUser(prev => prev ? { ...prev, credits: data.credits } : null);
+            }
+        };
+
+        // Subscribe to user data updates
+        const handleUserUpdate = (data: { userId: number; user: any; timestamp: number }) => {
+            console.log('👤 User update received:', data);
+
+            if (dbUser && dbUser.id === data.userId) {
+                // Update dbUser with new data
+                setDbUser(data.user);
+            }
+        };
+
+        websocketService.on('creditUpdate', handleCreditUpdate);
+        websocketService.on('userUpdate', handleUserUpdate);
+
+        // Cleanup on unmount
+        return () => {
+            websocketService.off('creditUpdate', handleCreditUpdate);
+            websocketService.off('userUpdate', handleUserUpdate);
+        };
+    }, [dbUser]);
+
     const login = async (email: string, password: string) => {
         const response = await fetch(`${API_URL}/api/login`, {
             method: 'POST',
@@ -127,6 +165,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = await response.json();
         localStorage.setItem(STORAGE_KEY_TOKEN, data.token);
         setDbUser(data.user);
+
+        // Update WebSocket authentication
+        websocketService.updateAuth(data.token);
     };
 
     const register = async (email: string, password: string) => {
@@ -144,11 +185,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = await response.json();
         localStorage.setItem(STORAGE_KEY_TOKEN, data.token);
         setDbUser(data.user);
+
+        // Update WebSocket authentication
+        websocketService.updateAuth(data.token);
     };
 
     const logout = () => {
         localStorage.removeItem(STORAGE_KEY_TOKEN);
         setDbUser(null);
+
+        // Disconnect WebSocket
+        websocketService.disconnect();
+
         // Reset app user to visitor
         const today = new Date().toISOString().split('T')[0];
         const visitorUser = {
@@ -160,6 +208,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setAppUser(visitorUser);
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(visitorUser));
+
+        // Reconnect as anonymous
+        websocketService.connect();
     };
 
     const refreshUser = async () => {
@@ -187,36 +238,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Admin never loses credits
         if (dbUser?.role === 'admin') return;
 
+        // Optimistic UI update - the backend will handle actual deduction
+        // and send WebSocket update which will sync the real value
         const updatedUser = {
             ...appUser,
-            credits: appUser.credits - 1,
+            credits: Math.max(0, appUser.credits - 1),
             totalGenerated: appUser.totalGenerated + 1
         };
 
-        // Optimistic update locally
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
         setAppUser(updatedUser);
 
-        // Sync with backend if logged in
-        if (dbUser) {
-            // We don't have a decrement endpoint yet, but we can assume the generation endpoint might handle it 
-            // OR we should add one. For now, let's rely on the generation endpoint to deduct credits if we implement it there,
-            // BUT the current generation logic is client-side credit tracking mostly.
-            // Ideally, the backend should handle credit deduction.
-            // For this task, I'll add a simple decrement call or just let the client track it for now 
-            // since the user didn't explicitly ask for backend enforcement of credits yet, just the Admin Panel management.
-            // Wait, "Somente o admin poderá alterar créditos...". This implies backend control.
-            // I should probably add a decrement endpoint or handle it in /generate.
-            // Let's add a simple decrement endpoint or just update the local state and assume the backend will be updated later for strict enforcement.
-            // Actually, `setDbUser` updates the local view of the DB user.
-            setDbUser({ ...dbUser, credits: updatedUser.credits });
-
-            // Fire and forget update to backend?
-            // Let's leave it client-side for this step to match existing logic, 
-            // but really we should deduct on server.
-            // I'll add a TODO or just implement a quick decrement endpoint if I have time.
-            // For now, let's stick to client-side + Admin Panel management.
-        }
+        // For logged-in users, backend handles deduction in /api/generate
+        // For visitors, backend handles device credits
+        // WebSocket will sync the real value back to us
     };
 
     // Check Device Credits - Verificar créditos do dispositivo

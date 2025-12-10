@@ -8,8 +8,11 @@ import { GoogleGenerativeAI } from "@google/generative-ai"; // Keep stable SDK f
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getDb } from './db.js';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 5001;
 
 // Configuração para servir o frontend
@@ -18,6 +21,14 @@ const __dirname = path.dirname(__filename);
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Initialize Socket.IO
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*", // In production, specify your frontend URL
+    methods: ["GET", "POST"]
+  }
+});
 
 // Middleware para remover o aviso do Ngrok
 app.use((req, res, next) => {
@@ -51,6 +62,53 @@ const checkDailyReset = async (db, user) => {
   }
   return updatedUser;
 };
+
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+
+// WebSocket Authentication Middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+
+  if (!token) {
+    // Allow anonymous connections (visitors)
+    socket.data.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.data.user = decoded;
+    next();
+  } catch (error) {
+    console.error('WebSocket auth error:', error);
+    socket.data.user = null;
+    next(); // Still allow connection but as anonymous
+  }
+});
+
+// WebSocket Connection Handler
+io.on('connection', (socket) => {
+  const user = socket.data.user;
+
+  if (user) {
+    console.log(`✅ User ${user.email} connected via WebSocket`);
+    socket.join(`user:${user.id}`); // Join user-specific room
+
+    if (user.role === 'admin') {
+      socket.join('admin'); // Join admin room for admin-specific events
+    }
+  } else {
+    console.log('✅ Anonymous user connected via WebSocket');
+  }
+
+  socket.on('disconnect', () => {
+    if (user) {
+      console.log(`❌ User ${user.email} disconnected`);
+    } else {
+      console.log('❌ Anonymous user disconnected');
+    }
+  });
+});
 
 // Logic for generation (reused for both /api/generate and /api/generate.php)
 const handleGenerate = async (req, res) => {
@@ -230,6 +288,36 @@ Requirements:
       text = `data:image/svg+xml;base64,${base64Svg}`;
     }
 
+    // ✅ DEDUCT CREDITS FOR AUTHENTICATED USERS
+    if (authHeader) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const db = await getDb();
+
+        // Get current user
+        const user = await db.get('SELECT id, email, credits, role FROM users WHERE id = ?', [decoded.id]);
+
+        if (user && user.role !== 'admin') {
+          // Deduct 1 credit
+          const newCredits = Math.max(0, user.credits - 1);
+          await db.run('UPDATE users SET credits = ? WHERE id = ?', [newCredits, user.id]);
+
+          console.log(`💳 User ${user.email} credits: ${user.credits} → ${newCredits}`);
+
+          // Emit WebSocket event for real-time update
+          io.to(`user:${user.id}`).emit('creditUpdate', {
+            userId: user.id,
+            credits: newCredits,
+            timestamp: Date.now()
+          });
+        }
+      } catch (error) {
+        console.error('Error deducting credits:', error);
+        // Don't fail the request if credit deduction fails
+      }
+    }
+
     res.json({ text: text });
 
   } catch (error) {
@@ -341,8 +429,6 @@ app.post('/api/moderate.php', handleModerate); // Alias for PHP compatibility
 
 // Servir arquivos estáticos do React (pasta dist na raiz do projeto)
 app.use(express.static(path.join(__dirname, '../dist')));
-
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 // Auth Middleware
 const authenticateToken = (req, res, next) => {
@@ -496,6 +582,21 @@ app.post('/api/admin/users/:id/credits', authenticateAdmin, async (req, res) => 
     const { credits } = req.body;
     const db = await getDb();
     await db.run('UPDATE users SET credits = ? WHERE id = ?', [credits, req.params.id]);
+
+    // Emit WebSocket event for real-time update
+    io.to(`user:${req.params.id}`).emit('creditUpdate', {
+      userId: req.params.id,
+      credits: credits,
+      timestamp: Date.now()
+    });
+
+    // Notify all admins about the change
+    io.to('admin').emit('userListUpdate', {
+      action: 'update',
+      userId: req.params.id,
+      timestamp: Date.now()
+    });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -531,6 +632,29 @@ app.put('/api/admin/users/:id', authenticateAdmin, async (req, res) => {
     const updated = await db.get('SELECT * FROM users WHERE id = ?', [req.params.id]);
     console.log(`✅ User after update:`, updated); // DEBUG LOG
 
+    // Emit WebSocket events for real-time updates
+    if (credits !== undefined) {
+      io.to(`user:${req.params.id}`).emit('creditUpdate', {
+        userId: req.params.id,
+        credits: credits,
+        timestamp: Date.now()
+      });
+    }
+
+    // Emit user data update
+    io.to(`user:${req.params.id}`).emit('userUpdate', {
+      userId: req.params.id,
+      user: updated,
+      timestamp: Date.now()
+    });
+
+    // Notify all admins about the change
+    io.to('admin').emit('userListUpdate', {
+      action: 'update',
+      userId: req.params.id,
+      timestamp: Date.now()
+    });
+
     res.json({ success: true, user: updated });
   } catch (error) {
     console.error("❌ Update Error:", error);
@@ -542,6 +666,14 @@ app.delete('/api/admin/users/:id', authenticateAdmin, async (req, res) => {
   try {
     const db = await getDb();
     await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
+
+    // Notify all admins about the deletion
+    io.to('admin').emit('userListUpdate', {
+      action: 'delete',
+      userId: req.params.id,
+      timestamp: Date.now()
+    });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -563,6 +695,6 @@ app.get(/.*/, (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor estático rodando na porta ${PORT} (Versão Atualizada)`);
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT} com WebSocket habilitado`);
 });
