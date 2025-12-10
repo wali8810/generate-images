@@ -1,5 +1,5 @@
 [build]
-  base = "."
+  base = ""
   command = "npm install && npm run build"
   publish = "dist"
 
@@ -10,4 +10,3 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  NPM_FLAGS = "--legacy-peer-deps"
