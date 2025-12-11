@@ -16,8 +16,7 @@ export const generateStamp = async (
     const response = await fetch(`${API_URL}/api/generate`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         userText,
@@ -52,8 +51,7 @@ export const moderateImage = async (base64Image: string): Promise<boolean> => {
     const response = await fetch(`${API_URL}/api/moderate`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ base64Image }),
     });
